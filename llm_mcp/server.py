@@ -1,9 +1,9 @@
-"""MCP 2 Streamable HTTP adapter: sealed until authenticated and explicitly enabled.
+"""MCP 2 Streamable HTTP adapter: one bounded owner-accepted smoke only.
 
-No owner-specific access token, OAuth grant, or gateway credential is embedded
-here. A separate, reviewed OAuth identity flow is required before connecting
-ChatGPT as an authenticated user. A static bearer can be used for isolated
-operator acceptance, but must not be mistaken for end-user OAuth.
+No credential or OAuth grant is embedded here. The separate private
+machine bearer is valid for an isolated, explicitly owner-requested synthetic
+coding acceptance only; it is not a ChatGPT user OAuth identity. Expiry and
+fixed input leave any general model-calling surface closed.
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import re
+import time
 import uuid
 from typing import Any
 
@@ -29,19 +30,30 @@ from llm_mcp.policy import (
 SERVER_NAME = "Truthrail LLM Adapter"
 REVIEW_ROUTE = "render-python-code-review"
 REVIEW_ENABLED = os.getenv("ENABLE_REVIEW", "false").lower() == "true"
+ACCEPTANCE_ONLY = os.getenv("REVIEW_ACCEPTANCE_ONLY", "false") == "true"
+ACCEPTANCE_EXPIRES = os.getenv("REVIEW_ACCEPTANCE_EXPIRES", "")
+ACCEPTANCE_MAX_WINDOW_SECONDS = 1800
+ACCEPTANCE_SOURCE = "synthetic/mcp-acceptance.py"
+ACCEPTANCE_CODE = "def is_even(number: int) -> bool:\n    return number % 2 == 1\n"
 _AUTH_TOKEN = os.getenv("MCP_AUTH_BEARER", "")
 _GATEWAY_KEY = os.getenv("GATEWAY_CLIENT_KEY", "")
 _SECRET_PATTERN = re.compile(r"[A-Za-z0-9._/+=~:-]{32,512}\Z")
 AUTH_VALID = bool(_SECRET_PATTERN.fullmatch(_AUTH_TOKEN))
 GATEWAY_VALID = bool(_SECRET_PATTERN.fullmatch(_GATEWAY_KEY))
-QUOTA = LocalReviewQuota()
+QUOTA = LocalReviewQuota(max_calls=1)
 
 
 # This application does not grant MCP clients model spending authority until
 # all of: an explicit, protected client credential; a reviewed gateway client
 # key; and an explicit enable switch have been provisioned.
 def operational() -> bool:
-    return bool(REVIEW_ENABLED and AUTH_VALID and GATEWAY_VALID)
+    if not (REVIEW_ENABLED and AUTH_VALID and GATEWAY_VALID and ACCEPTANCE_ONLY):
+        return False
+    if not ACCEPTANCE_EXPIRES.isdecimal() or len(ACCEPTANCE_EXPIRES) > 12:
+        return False
+    expiry = int(ACCEPTANCE_EXPIRES)
+    now = time.time()
+    return bool(now < expiry <= now + ACCEPTANCE_MAX_WINDOW_SECONDS)
 
 
 mcp = MCPServer(SERVER_NAME)
@@ -95,6 +107,8 @@ def get_adapter_status(verify_gateway: bool = False) -> dict[str, Any]:
         "direct_repository_access": False,
         "model_tools": False,
         "gateway_management_access": False,
+        "test_only_automatic_expiry": True,
+        "general_inference_enabled": False,
         "gateway_auth_probe": (
             _probe_existing_gateway() if verify_gateway is True else "not_requested"
         ),
@@ -121,6 +135,10 @@ def review_public_python(
             code=code, source_label=source_label,
             classification=classification, consent=share_with_opencode_go,
         )
+        if code != ACCEPTANCE_CODE or source_label != ACCEPTANCE_SOURCE:
+            raise ReviewPolicyError("only_reviewed_acceptance_fixture_allowed")
+        # One request per process; use only a fresh, short-lived, owner-driven
+        # window. This is NOT a durable billing ceiling across restarts.
         QUOTA.begin()
     except ReviewPolicyError as exc:
         return {"status": "blocked", "reason": str(exc)}

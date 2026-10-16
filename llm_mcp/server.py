@@ -47,9 +47,42 @@ def operational() -> bool:
 mcp = MCPServer(SERVER_NAME)
 
 
+# Read-only, owner-requested gateway authentication probe. Does not make any
+# completion/inference calls and never returns the upstream response body.
+GATEWAY_MODELS_URL = "https://truthrail-llm-gateway.onrender.com/v1/models"
+
+
+def _probe_existing_gateway() -> str:
+    if not GATEWAY_VALID:
+        return "client_credential_not_provisioned"
+    try:
+        with httpx.Client(
+            timeout=httpx.Timeout(50, connect=8), follow_redirects=False,
+            trust_env=False,
+        ) as client:
+            response = client.get(
+                GATEWAY_MODELS_URL,
+                headers={
+                    "Authorization": "Bearer " + _GATEWAY_KEY,
+                    "Accept": "application/json",
+                },
+            )
+        if response.status_code == 200 and len(response.content) <= 65536:
+            return "gateway_client_authenticated"
+        if response.status_code in (401, 403):
+            return "gateway_client_denied"
+        return "gateway_unverified"
+    except (httpx.HTTPError, ValueError, TypeError):
+        return "gateway_unreachable"
+
+
 @mcp.tool()
-def get_adapter_status() -> dict[str, Any]:
-    """Describe this authenticated connector's narrow capabilities; no secrets or inference."""
+def get_adapter_status(verify_gateway: bool = False) -> dict[str, Any]:
+    """Describe available scope; optionally GET the existing gateway's model catalog.
+
+    The opt-in check does not call an inference endpoint or grant model usage.
+    MCP HTTP authentication is enforced at the network boundary.
+    """
     return {
         "service": "truthrail-llm-mcp",
         "state": "ready_for_limited_review" if operational() else "sealed_no_model_access",
@@ -62,6 +95,10 @@ def get_adapter_status() -> dict[str, Any]:
         "direct_repository_access": False,
         "model_tools": False,
         "gateway_management_access": False,
+        "gateway_auth_probe": (
+            _probe_existing_gateway() if verify_gateway is True else "not_requested"
+        ),
+        "model_inference_called_by_probe": False,
     }
 
 

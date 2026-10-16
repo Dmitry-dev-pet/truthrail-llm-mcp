@@ -1,7 +1,13 @@
-# Optional Dashboard Blueprint; the connected Render tool can also create it.
+# A single-service Blueprint for ADOPTING the existing truthrail-llm-mcp service.
+# Important: only truthrail-llm-mcp is managed here. The referenced gateway
+# already exists in the SAME Render workspace and is NOT changed by this file.
+# Review the Render Blueprint preview before syncing; abort if it would create
+# a duplicate MCP service or change the existing gateway. No secrets in Git.
 services:
   - type: web
     name: truthrail-llm-mcp
+    repo: https://github.com/Dmitry-dev-pet/truthrail-llm-mcp
+    branch: main
     runtime: docker
     plan: free
     region: frankfurt
@@ -9,13 +15,23 @@ services:
     dockerContext: .
     autoDeployTrigger: 'off'
     healthCheckPath: /health
+    previews:
+      generation: 'off'
     envVars:
       - key: PORT
         value: '10000'
+      # This is NEVER switched on automatically by a secret sync.
       - key: ENABLE_REVIEW
         value: 'false'
+      # Separate machine-to-machine bearer; not an OAuth identity grant.
+      # Render generates 256 bits and stores the value outside GitHub.
       - key: MCP_AUTH_BEARER
         generateValue: true
-      # A separate reviewed credential transfer is required before model calls.
+      # Reuse the EXISTING, separately authenticated CLIProxyAPI client secret.
+      # The gateway's OPENCODE_GO key is NOT passed to this MCP service.
+      # Render resolves this only on Blueprint sync, not continuously.
       - key: GATEWAY_CLIENT_KEY
-        sync: false
+        fromService:
+          type: web
+          name: truthrail-llm-gateway
+          envVarKey: CPA_CLIENT_API_KEY

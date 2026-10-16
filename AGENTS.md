@@ -28,7 +28,13 @@
   Go provider key. The working old gateway remains unchanged.
 - The optional `render.yaml` is source-only and was not synced. The complete
   operator link required no Blueprint; do not create a duplicate MCP service.
-- Model calls remain deliberately disabled by `ENABLE_REVIEW=false`. Do not
-  infer paid inference authorization from successful machine authentication.
+- Model calls remain deliberately disabled by `ENABLE_REVIEW=false` by default.
+  An owner-reviewed **single synthetic acceptance only** requires both
+  `REVIEW_ACCEPTANCE_ONLY=true` and `REVIEW_ACCEPTANCE_EXPIRES` set to a
+  future Unix timestamp within 30 minutes. It only permits the fixed
+  public `synthetic/mcp-acceptance.py` even-number bug snippet, one model
+  request per process, no tools or provider/model choice. The expiry is
+  not durable billing control; reset `ENABLE_REVIEW=false` after the test.
+  Never infer general inference authority from the temporary smoke.
 - One process and best-effort local quota are not a financial budget guarantee. Do not activate unattended inference without durable metering and operator-defined cost ceiling.
 - All changes: branch, CI, PR, merge. The gateway route and working GitHub issue worker are unchanged unless separately reviewed.

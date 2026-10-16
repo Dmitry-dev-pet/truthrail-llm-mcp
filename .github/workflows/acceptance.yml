@@ -1,0 +1,51 @@
+name: Live sealed MCP acceptance
+
+on:
+  pull_request:
+    paths: [.github/workflows/acceptance.yml]
+  push:
+    branches: [main]
+    paths: [.github/workflows/acceptance.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-readiness-and-private-mcp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify live Render MCP transport remains sealed
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://truthrail-llm-mcp.onrender.com
+          # Free services may cold-start. No inference or secret is involved.
+          curl -fsS --retry 4 --retry-delay 4 --retry-all-errors \
+            --max-time 30 "$base/health" -o /tmp/llm-mcp-health.json
+          python3 - <<'PY'
+          import json
+          obj=json.load(open('/tmp/llm-mcp-health.json'))
+          assert obj=={
+              'service':'truthrail-llm-mcp',
+              'status':'ok',
+              'inference':'disabled',
+          }, 'Health contract or closed-mode changed'
+          print('live_health=PASS inference=disabled')
+          PY
+          status=$(curl -sS --max-time 30 -o /tmp/anonymous-body \
+            -D /tmp/anonymous-headers -w '%{http_code}' \
+            -X POST "$base/mcp" \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          test "$status" = '401' || {
+            echo "::error::Unauthorized live tools/list was not denied (status=$status)"
+            exit 1
+          }
+          grep -iq '^www-authenticate: Bearer' /tmp/anonymous-headers || {
+            echo '::error::Missing bearer authentication challenge'
+            exit 1
+          }
+          echo 'live_mcp_anonymous=DENIED status=401 tool_calls=0'

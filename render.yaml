@@ -1,0 +1,21 @@
+# Optional Dashboard Blueprint; the connected Render tool can also create it.
+services:
+  - type: web
+    name: truthrail-llm-mcp
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    autoDeployTrigger: 'off'
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: '10000'
+      - key: ENABLE_REVIEW
+        value: 'false'
+      - key: MCP_AUTH_BEARER
+        generateValue: true
+      # A separate reviewed credential transfer is required before model calls.
+      - key: GATEWAY_CLIENT_KEY
+        sync: false

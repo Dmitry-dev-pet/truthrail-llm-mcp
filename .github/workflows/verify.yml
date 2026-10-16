@@ -1,0 +1,46 @@
+name: MCP adapter validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  contract-and-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install reviewed MCP SDK and compile sources
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -r requirements.txt
+          python3 -m compileall -q llm_mcp tests
+          python3 -m unittest discover -s tests -v
+      - name: Build and boot sealed Docker container
+        run: |
+          set -euo pipefail
+          docker build --pull -t truthrail-llm-mcp:ci .
+          docker run -d --name llm-mcp-ci -p 127.0.0.1:18199:10000 truthrail-llm-mcp:ci
+          trap 'docker rm -f llm-mcp-ci >/dev/null 2>&1 || true' EXIT
+          for n in $(seq 1 40); do
+            if curl -fsS --max-time 2 http://127.0.0.1:18199/health -o /tmp/llm-mcp-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import json
+          h=json.load(open('/tmp/llm-mcp-health.json'))
+          assert h=={'service':'truthrail-llm-mcp','status':'ok','inference':'disabled'},h
+          PY
+          for uri in /mcp /mcp/; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
+              -X POST "http://127.0.0.1:18199${uri}" \
+              -H 'Content-Type: application/json' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+            test "$status" = '401' || { echo '::error::Anonymous MCP access was not denied'; exit 1; }
+          done
+          echo 'docker_boot=PASS sealed_mcp_auth=PASS providers_called=0'

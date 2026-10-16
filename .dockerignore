@@ -1,0 +1,13 @@
+.git
+.github
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+**/*secret*
+**/*.key
+**/*.pem
+tests
+README.md
+AGENTS.md
+render.yaml

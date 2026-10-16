@@ -9,7 +9,7 @@ Dedicated **Streamable HTTP MCP** layer in front of the already verified Truthra
 This v0 contains exactly two MCP tools:
 
 - `get_adapter_status`: bounded status with no secret material.
-- `review_public_python`: one owner-consented public Python correctness review via fixed `opencode-go/glm-5.3-flash`, at most 2400 source bytes, 70 lines, 320 completion tokens and 1600 prompt tokens. No tool calls or retries.
+- `review_public_python`: currently only a **fixed public synthetic Python acceptance snippet**, not general code review. The response is limited to 320 completion tokens and 1600 prompt tokens, with no model tools or retries. It cannot run without a separate temporary owner-enabled acceptance window.
 
 The gateway model has already been verified through the separate owner-gated GitHub Action: [run #38831339510](https://github.com/Dmitry-dev-pet/it-mentor/actions/runs/38831339510). This **does not** prove the new MCP transport or ChatGPT OAuth is connected.
 
@@ -57,9 +57,42 @@ Secret configuration (set privately in Render Environment only):
 
 The server's **initial** deployment was intentionally sealed without client credentials. The owner-provisioned one-time GitHub route has now installed both protected machine-client credentials on the existing Render service; the upstream provider key remains absent here. `ENABLE_REVIEW=false` remains the independent model-inference gate. ChatGPT OAuth is not a requirement for this independent service.
 
+## One-shot live coding acceptance (temporary, no general access)
+
+Before enabling regular tool calls, the service supports only a **time-limited
+synthetic acceptance smoke**. The following THREE runtime settings must be
+explicitly set through the owner's protected Render service settings,
+**in addition** to the two existing client credentials:
+
+- `ENABLE_REVIEW=true`
+- `REVIEW_ACCEPTANCE_ONLY=true`
+- `REVIEW_ACCEPTANCE_EXPIRES=<future Unix epoch in seconds>`, at most **1800**
+  seconds ahead of the current clock.
+
+Even then, the tool accepts only this exact pair:
+
+- Source: `synthetic/mcp-acceptance.py`
+- Public code: `def is_even(number: int) -> bool:\n    return number % 2 == 1\n`
+
+The caller must also set `classification=public` and
+`share_with_opencode_go=true` for this particular request. All other
+snippets are blocked. The in-memory meter permits **one attempt per
+process**; expiry prevents further use without an authorized new rollout.
+**Neither is a durable monetary quota.** The original client bearer is held
+only in the owning private sandbox, not embedded in ChatGPT or source.
+
+An owner-authorized single GitHub Issue smoke may call this existing MCP
+through its protected bearer and confirm a genuine OpenCode Go coding review.
+Once complete, reset `ENABLE_REVIEW=false`,
+`REVIEW_ACCEPTANCE_ONLY=false`, and `REVIEW_ACCEPTANCE_EXPIRES=0`
+through Render settings and verify the redeploy. A failed smoke still
+requires closing these settings. This temporary path does NOT authorize
+continuous OpenCode Go inference. Durable quotas and independently
+approved client identity are required for regular use.
+
 ## Authorization and cost model
 
-Two independent gates: MCP caller authentication and gateway client authentication. Tool itself enforces public Python-only input, explicit broker-sharing consent, fixed model, fixed URL, no private source and no tools. One in-flight request and a process-local limit of eight calls per 24h mitigate accidental spending but **reset on restart**, so they are **not a hard budget**. Until an authenticated client, owner-approved limited task and suitable metering/spending guardrail are verified, keep `ENABLE_REVIEW=false` on public hosting.
+Two independent gates: MCP caller authentication and gateway client authentication. The currently reviewed third gate is a **fixed synthetic test plus a short expiry**. The tool rejects arbitrary snippets, private source, URLs, model switching and model tools. The in-memory one-attempt meter resets on restart, so it is **not a hard monetary budget**. After a single, owner-authorized acceptance test, reset `ENABLE_REVIEW=false` and keep general model access disabled until a durable quota and client authorization are reviewed.
 
 ## Testing
 

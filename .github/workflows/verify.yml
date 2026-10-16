@@ -16,7 +16,7 @@ jobs:
       - name: Install reviewed MCP SDK and compile sources
         run: |
           set -euo pipefail
-          python3 -m pip install --disable-pip-version-check -r requirements.txt
+          python3 -m pip install --disable-pip-version-check -r requirements-ci.txt
           python3 -m compileall -q llm_mcp tests
           python3 -m unittest discover -s tests -v
       - name: Build and boot sealed Docker container

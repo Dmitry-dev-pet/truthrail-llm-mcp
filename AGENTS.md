@@ -22,5 +22,13 @@
 
 - The temporary Render management API key is never consumed by the MCP server.
 - This server is not an OAuth identity provider. ChatGPT plugin linking needs a reviewed OAuth identity provider, or an explicitly supported private plugin API-key connection; do not claim a bare 401 equals a complete OAuth flow.
+- The original machine-client credential link has been independently verified
+  through owner-only `it-mentor` Issue #88 / Actions #38844708536. The MCP
+  server has only two protected client credentials, not the upstream OpenCode
+  Go provider key. The working old gateway remains unchanged.
+- The optional `render.yaml` is source-only and was not synced. The complete
+  operator link required no Blueprint; do not create a duplicate MCP service.
+- Model calls remain deliberately disabled by `ENABLE_REVIEW=false`. Do not
+  infer paid inference authorization from successful machine authentication.
 - One process and best-effort local quota are not a financial budget guarantee. Do not activate unattended inference without durable metering and operator-defined cost ceiling.
 - All changes: branch, CI, PR, merge. The gateway route and working GitHub issue worker are unchanged unless separately reviewed.
